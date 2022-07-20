@@ -1,27 +1,18 @@
-# Copyright (c) 2021 Huntress Labs, Inc.
+# Copyright (c) 2022 Huntress Labs, Inc.
 # All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met:
-#    * Redistributions of source code must retain the above copyright
-#      notice, this list of conditions and the following disclaimer.
-#    * Redistributions in binary form must reproduce the above copyright
-#      notice, this list of conditions and the following disclaimer in the
+# Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+#    * Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+#    * Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the
 #      documentation and/or other materials provided with the distribution.
-#    * Neither the name of the Huntress Labs nor the names of its contributors
-#      may be used to endorse or promote products derived from this software
+#    * Neither the name of the Huntress Labs nor the names of its contributors may be used to endorse or promote products derived from this software
 #      without specific prior written permission.
 #
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL HUNTRESS LABS BE LIABLE FOR ANY DIRECT, INDIRECT,
-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
-# OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-# LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
-# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL HUNTRESS LABS BE LIABLE FOR ANY DIRECT, 
+# INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS 
+# OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 # The Huntress installer needs an Account Key and an Organization Key (a user
@@ -32,14 +23,17 @@
 # For more details, see our KB article
 # https://support.huntress.io/hc/en-us/articles/4404004936339-Deploying-Huntress-with-PowerShell
 
-# Usage :
-# powershell -executionpolicy bypass -f ./InstallHuntress.powershellv1.ps1 [-acctkey <account_key>] [-orgkey <organization_key>] [-reregister] [-reinstall]
-# -reinstall 
+# Usage (remove brackets [] and substitute <variable> for your value):
+# powershell -executionpolicy bypass -f ./InstallHuntress.powershellv1.ps1 [-acctkey <account_key>] [-orgkey <organization_key>] [-tags <tags>] [-reregister] [-reinstall] [-uninstall]
+#
+# example:
+# powershell -executionpolicy bypass -f ./InstallHuntress.powershellv1.ps1 -acctkey "0b8a694b2eb7b642069" -orgkey "Buzzword Company Name" -tags "production,US West" 
 
 # Optional command line params, this has to be the first line in the script.
 param (
   [string]$acctkey,
   [string]$orgkey,
+  [string]$tags,
   [switch]$reregister,
   [switch]$reinstall,
   [switch]$uninstall
@@ -53,8 +47,11 @@ param (
 # Replace __ACCOUNT_KEY__ with your account secret key (from your Huntress portal's "download agent" section)
 $AccountKey = "__ACCOUNT_KEY__"
 
-# Replace __ORGANIZATION_KEY__ with a unique identifier for the organization/client (your choice)
+# Replace __ORGANIZATION_KEY__ with a unique identifier for the organization/client (your choice of naming scheme)
 $OrganizationKey = "__ORGANIZATION_KEY__"
+
+# Replace __TAGS__ with one or more tags, separated by commas (this field is optional!)
+$TagsKey = "__TAGS__"
 
 # Set to "Continue" to enable verbose logging.
 $DebugPreference = "SilentlyContinue"
@@ -67,14 +64,14 @@ $DebugPreference = "SilentlyContinue"
 # Find poorly written code faster with the most stringent setting.
 Set-StrictMode -Version Latest
 
-# Check for old outdated Windows PowerShell (script works as low as 2.0, this is for logging/debugging)
+# Check for old outdated Windows PowerShell (script works as low as PoSh 2.0, this is for logging/debugging)
 $oldOS = $false
 if ($PsVersionTable.PsVersion.Major -lt 3){
     $oldOS = $true
 }
 
 # These are used by the Huntress support team when troubleshooting.
-$ScriptVersion = "2021 November 15; revision 2"
+$ScriptVersion = "2022 July 20; revision 2"
 $ScriptType = "PowerShell"
 
 # Check for an account key specified on the command line.
@@ -86,6 +83,12 @@ if ( ! [string]::IsNullOrEmpty($acctkey) ) {
 if ( ! [string]::IsNullOrEmpty($orgkey) ) {
     $OrganizationKey = $orgkey
 }
+
+# Check for tags specified on the command line.
+if ( ! [string]::IsNullOrEmpty($tags) ) {
+    $TagsKey = $tags
+}
+
 
 # variables used throughout this script
 $X64 = 64
@@ -310,7 +313,14 @@ function Install-Huntress ($OrganizationKey) {
     # execute the installer, stopping if it gets hung (security product interference)
     $msg = "Executing installer..."
     LogMessage $msg
-    $process = Start-Process $InstallerPath "/ACCT_KEY=`"$AccountKey`" /ORG_KEY=`"$OrganizationKey`" /S" -PassThru
+    
+    # if $Tags value exists install using the provided tags, otherwise no tags
+    if ($Tags) {
+        $process = Start-Process $InstallerPath "/ACCT_KEY=`"$AccountKey`" /ORG_KEY=`"$OrganizationKey`" /TAGS=`"$TagsKey`" /S" -PassThru
+    } else {
+        $process = Start-Process $InstallerPath "/ACCT_KEY=`"$AccountKey`" /ORG_KEY=`"$OrganizationKey`" /S" -PassThru
+    }
+
     try {
         $process | Wait-Process -Timeout $timeout -ErrorAction Stop
     } catch {
@@ -452,8 +462,19 @@ function testAdministrator {
 
 # Ensure the disk has enough space for the install files + agent, then write results to the log AB
 function checkFreeDiskSpace {
-    # Using an older disk query to be backwards compatible with PoSh 2
-    $freeSpace = (Get-WmiObject -query "Select * from Win32_LogicalDisk where DeviceID='c:'" | Select FreeSpace).FreeSpace
+    # Using an older disk query to be backwards compatible with PoSh 2, catch WMI errors and check repository
+    try {
+        $freeSpace = (Get-WmiObject -query "Select * from Win32_LogicalDisk where DeviceID='c:'" | Select FreeSpace).FreeSpace
+    } catch {
+        LogMessage "WMI issues discovered (free space query), attempting to fix the repository"
+        winmgt -verifyrepository
+        $drives = get-psdrive
+        foreach ($drive in $drives) {
+            if ($drive.Name -eq "C") { 
+                $freeSpace = $drive.Free
+            }
+        }
+    }
     $freeSpaceNice = $freeSpace.ToString('N0')
     $estimatedSpaceNeeded = 45123456
     if ($freeSpace -lt $estimatedSpaceNeeded) {
@@ -536,7 +557,13 @@ function main () {
     LogMessage "Script type: '$ScriptType'"
     LogMessage "Script version: '$ScriptVersion'"
     LogMessage "Host name: '$env:computerName'"
-    $os = (get-WMiObject -computername $env:computername -Class win32_operatingSystem).caption.Trim()
+    try {
+        $os = (get-WMiObject -computername $env:computername -Class win32_operatingSystem).caption.Trim()
+    } catch {
+        LogMessage "WMI issues discovered (computer name query), attempting to fix the repository"
+        winmgt -verifyrepository
+        $os = (get-itemproperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name ProductName).ProductName
+    }
     LogMessage "Host OS: '$os'"
     LogMessage "Host Architecture: '$(Get-WindowsArchitecture)'"
     if ($oldOS) {
@@ -576,6 +603,7 @@ function main () {
     $masked = $AccountKey.Substring(0,4) + "************************" + $AccountKey.SubString(28,4)
     LogMessage "AccountKey: '$masked'"
     LogMessage "OrganizationKey: '$OrganizationKey'"
+    LogMessage "Tags: $($Tags)"
 
     # reregister > reinstall > uninstall > install (in decreasing order of impact)
     # reregister = reinstall + delete registry keys
